@@ -1,4 +1,4 @@
-module go-logger
+module logger
 
 require (
 	github.com/fatih/color v1.7.0
