@@ -261,13 +261,13 @@ func (l *logger) E(format string, v ...interface{}) {
 func (l *logger) printLog(output *OutputLog) {
 	if l.config.OutputType&Console == Console {
 		if output.level == Info {
-			color.Green(time.Now().Format("15:04:05.9999999") + " " + output.content)
+			color.Green(time.Now().Format("15:04:05") + " " + output.content)
 		} else if output.level == Debug {
-			color.Blue(time.Now().Format("15:04:05.9999999") + " " + output.content)
+			color.Blue(time.Now().Format("15:04:05") + " " + output.content)
 		} else if output.level == Warning {
-			color.Yellow(time.Now().Format("15:04:05.9999999") + " " + output.content)
+			color.Yellow(time.Now().Format("15:04:05") + " " + output.content)
 		} else if output.level == Error {
-			color.Red(time.Now().Format("15:04:05.9999999") + " " + output.content)
+			color.Red(time.Now().Format("15:04:05") + " " + output.content)
 		}
 	}
 	if l.config.OutputType&File == File {
