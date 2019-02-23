@@ -32,7 +32,8 @@ type Config struct {
 	LogFileRollingType RollingType
 	LogFileOutputDir   string
 	LogFileName        string
-	LogFileMaxSize     int64 // 字节
+	LogFileMaxSize     int64         // 字节
+	ScanFileInterval   time.Duration // 文件扫描时间间隔，最小10秒
 }
 
 type Level int
@@ -85,14 +86,11 @@ type logger struct {
 	c chan *OutputLog
 	// 当前日志文件
 	f *os.File
-	// 检查文件monitor是否在运行
-	isMonitorRunning bool
 	// 日志前缀，将写在日期和等级后面，日志内容前面
 	prefixes []string
 	pool     *sync.Pool
 	// 日志日期格式
-	dateFormat       string
-	scanFileInterval time.Duration
+	dateFormat string
 }
 
 type OutputLog struct {
@@ -101,14 +99,13 @@ type OutputLog struct {
 }
 
 func NewLogger(config *Config) Logger {
+	if config.ScanFileInterval < 10*time.Second {
+		config.ScanFileInterval = 10 * time.Second
+	}
 	l := &logger{}
 	l.setConfig(config)
 	l.init()
 	return l
-}
-
-func (l *logger) SetLevel(level Level) {
-	l.config.Level = level
 }
 
 func (l *logger) init() {
@@ -118,7 +115,6 @@ func (l *logger) init() {
 		return &OutputLog{}
 	}
 	l.dateFormat = "20060102"
-	l.scanFileInterval = 5 * time.Minute
 	// log write
 	go func() {
 		switch l.config.LogFileRollingType {
@@ -147,13 +143,15 @@ func (l *logger) init() {
 				}
 			}
 		case RollingSize:
-			sizeCheckChan := time.NewTicker(l.scanFileInterval).C
+			sizeCheckChan := time.NewTicker(l.config.ScanFileInterval).C
 			for {
 				select {
 				case s := <-l.c:
 					l.printLog(s)
 				case <-sizeCheckChan:
-					l.rollingFile("")
+					if info, err := l.f.Stat(); err == nil && info.Size() > l.config.LogFileMaxSize {
+						l.rollingFile("")
+					}
 				}
 			}
 		case RollingSize | RollingDaily:
@@ -161,7 +159,7 @@ func (l *logger) init() {
 			leftSecond := time.Duration(86400 - now.Hour()*3600 - now.Minute()*60 - now.Second())
 			date := now.Format(l.dateFormat)
 			dailyCheckChan := time.After(time.Millisecond*1000*leftSecond + 500)
-			sizeCheckChan := time.NewTicker(l.scanFileInterval).C
+			sizeCheckChan := time.NewTicker(l.config.ScanFileInterval).C
 			for {
 				select {
 				case s := <-l.c:
@@ -173,7 +171,9 @@ func (l *logger) init() {
 					date = now.Format(l.dateFormat)
 					dailyCheckChan = time.After(time.Millisecond*1000*leftSecond + 500)
 				case <-sizeCheckChan:
-					l.rollingFile(date)
+					if info, err := l.f.Stat(); err == nil && info.Size() > l.config.LogFileMaxSize {
+						l.rollingFile(date)
+					}
 				}
 			}
 		}
@@ -185,6 +185,10 @@ func (l *logger) setConfig(c *Config) {
 	if c.OutputType&File == File {
 		l.makeFile()
 	}
+}
+
+func (l *logger) SetLevel(level Level) {
+	l.config.Level = level
 }
 
 func (l *logger) SetPrefixes(prefix ...string) {
